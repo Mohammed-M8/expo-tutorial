@@ -6,17 +6,32 @@ import EmojiSticker from "@/components/emoji-sticker";
 import IconButton from "@/components/icon-button";
 import ImageViewer from "@/components/image-viewer";
 import { ImageSource } from "expo-image";
+import { captureRef } from 'react-native-view-shot';
+
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from "react";
+import * as MediaLibrary from 'expo-media-library';
+import { ComponentRef, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+
 const PlaceholderImage = require('@/assets/images/background-image.png')
 
 export default function Index() {
+  const imageRef = useRef<ComponentRef<typeof View>>(null)
+
+  const [permissionResponse, requestPermission] = MediaLibrary.usePermissions({ writeOnly: true })
   const [showAppOptions, setShowAppOptions] = useState<boolean>(false)
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined)
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false)
   const [pickedEmoji, setPickedEmoji] = useState<ImageSource | undefined>(undefined)
+
+  useEffect(() => {
+    if (!permissionResponse?.granted) {
+      requestPermission();
+    }
+  }, [])
+
   const pickImageAsync = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -46,14 +61,43 @@ export default function Index() {
   }
 
   const onSaveImageAsync = async () => {
+    if (Platform.OS !== 'web') {
+      try {
+        const localUri = await captureRef(imageRef, {
+          height: 440,
+          quality: 1
+        });
 
+        await MediaLibrary.Asset.create(localUri);
+        alert('Saved');
+      } catch (error) {
+        console.log(error)
+      }
+    } else {
+      try {
+        const dataUrl = await captureRef(imageRef, {
+          format: 'jpg',
+          quality: 0.95,
+          result: 'data-uri'
+        });
+
+        const link = document.createElement('a');
+        link.download = 'sticker-smash.jpeg';
+        link.href = dataUrl;
+        link.click();
+      } catch (error) {
+        console.log(error)
+      }
+    }
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.imageContainer}>
-        <ImageViewer imgSource={PlaceholderImage} selectedImage={selectedImage} />
-      {pickedEmoji&&<EmojiSticker imageSize={40} stickerSource={pickedEmoji}/>}
+        <View ref={imageRef} collapsable={false}>
+          <ImageViewer imgSource={PlaceholderImage} selectedImage={selectedImage} />
+          {pickedEmoji && <EmojiSticker imageSize={40} stickerSource={pickedEmoji} />}
+        </View>
       </View>
       {showAppOptions ? (
         <View style={styles.footerContainer}>
@@ -77,7 +121,7 @@ export default function Index() {
         </View>
       )}
       <EmojiPicker isVisible={isModalVisible} onClose={onModalClose}>
-        <EmojiList onSelect={setPickedEmoji} onCloseModal={onModalClose}/>
+        <EmojiList onSelect={setPickedEmoji} onCloseModal={onModalClose} />
       </EmojiPicker>
     </SafeAreaView>
   );
